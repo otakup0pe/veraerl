@@ -1,0 +1,6 @@
+{application, veraerl, [
+                        {description, "Client for the Vera suite of IoT controllers"},
+                        {vsn, "0.1"},
+                        {applications, [kernel,stdlib,sasl,jsx,inets,ssl]},
+                        {mod, {veraerl_app, []}}
+]}.
