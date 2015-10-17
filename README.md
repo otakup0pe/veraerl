@@ -1,8 +1,8 @@
-                               _
-__   _____ _ __ __ _  ___ _ __| |
-\ \ / / _ \ '__/ _` |/ _ \ '__| |
- \ V /  __/ | | (_| |  __/ |  | |
-  \_/ \___|_|  \__,_|\___|_|  |_|
+                                   _
+    __   _____ _ __ __ _  ___ _ __| |
+    \ \ / / _ \ '__/ _` |/ _ \ '__| |
+     \ V /  __/ | | (_| |  __/ |  | |
+      \_/ \___|_|  \__,_|\___|_|  |_|
 ------
 
 The `veraerl` component is meant to provide a simple Erlang interface to the Vera suite of Home Automation devices. All of my testing will be done on a Vera 3 running MiOS UI7 as that is all I have.
