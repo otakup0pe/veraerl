@@ -4,14 +4,20 @@
 -export([init/1, handle_cast/2, handle_call/3]).
 -export([device_list/1, device_power/3, device_id/2, device_vars/2, device_var_key/3]).
 -export([scene_list/1, scene_id/2, scene/2]).
--export([job/2]).
+-export([job/2, reload/1, alive/1]).
 
 -record(state, {host}).
 
-start_link(Host) ->
+start_link(Host) when is_list(Host) ->
     gen_server:start_link(?MODULE, [Host], []).
-start_link(Name, Host) ->
+start_link(Name, Host) when is_list(Host) ->
     gen_server:start_link(Name, ?MODULE, [Host], []).
+
+reload(PID) ->
+    gen_server:cast(PID, reload).
+
+alive(PID) ->
+    gen_server:call(PID, alive).
 
 job(PID, ID) ->
     {ok, R} = gen_server:call(PID, {job, ID}),
@@ -32,12 +38,12 @@ device_id(PID, Name) when is_binary(Name) ->
 device_id(_PID, _Name, [], [I]) when is_integer(I) ->
     I;
 device_id(_PID, _Name, [], R) when is_list(R) ->
-    R;
+    {multiple, R};
 device_id(PID, Name, [{ID, Name}|T], R) ->
     device_id(PID, Name, T, [ID|R]);
 device_id(PID, Name, [_|T], R) ->
     device_id(PID, Name, T, R).
-device_vars(PID, ID) ->
+device_vars(PID, ID) when is_integer(ID) ->
     {ok, R} = gen_server:call(PID, {device_vars, ID}),
     R.
 
@@ -163,6 +169,14 @@ handle_call({device_vars, ID}, _From, #state{host=H} = State) ->
                             {reply, {ok, V}, State}
                     end
             end
+    end;
+handle_call(alive, _From, #state{host=H} = State) ->
+    PL = [
+          {"id", "alive"}
+         ],
+    case veraerl_util:hit_vera(H, PL, get) of
+        ok ->
+            {reply, ok, State}
     end.
 
 handle_cast({scene, ID}, #state{host=H} = State) ->
@@ -173,5 +187,10 @@ handle_cast({scene, ID}, #state{host=H} = State) ->
           {"SceneNum",integer_to_list(ID)}
          ],
     veraerl_util:hit_vera(H, PL, get),
+    {noreply, State};
+handle_cast(reload, #state{host=H} = State) ->
+    PL = [
+          {"id", "reload"}
+         ],
+    veraerl_util:hit_vera(H, PL, get),
     {noreply, State}.
-

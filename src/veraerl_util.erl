@@ -12,7 +12,9 @@ distill_suffix([{K, V}|T], R) ->
 hit_vera(Host, Suffix, Method) ->
     Url = "http://" ++ Host ++ ":3480/data_request?output_format=json" ++ distill_suffix(Suffix),
     case httpc:request(Method, {Url, []}, [], [{body_format, binary}]) of
-        {ok, {{_, Status, _}, _H, Body}} ->
+        {ok, {{_, 200, _}, _H, <<"OK">>}} ->
+            ok;
+        {ok, {{_, 200, _}, _H, Body}} ->
             jsx:decode(Body)
     end.
 

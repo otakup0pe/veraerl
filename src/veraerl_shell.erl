@@ -1,17 +1,48 @@
 -module(veraerl_shell).
 -behaviour(shellbeam).
 
+-export([autopid/1]).
 -export([commands/0]).
--export([discover/0, start/2, auto/0]).
+-export([discover/0, start/2, auto/0, reload/1]).
 
+autopid(Name) when is_list(Name) ->
+    case veraerl:pid(Name) of
+        PID when is_pid(PID) ->
+            PID;
+        {error, badarg} ->
+            {error, "Invalid Vera name - did you start it?"}
+    end.                
+                
 commands() ->
     [
      {["device"], "Device commands", {subshell, [veraerl_device_shell], "device"}},
      {["scene"], "Scene commands", {subshell, [veraerl_scene_shell], "scene"}},
-     {["discover"], "Discover local veras", fun discover/0},
-     {["auto"], "Configure the first vera found on the LAN", fun auto/0},
-     {["start", {"name", auto}, {"host", auto}], "Start a vera client", fun start/2}
+     {["discover"], "Discover local Veras", fun discover/0},
+     {["auto"], "Configure the first Vera found on the LAN", fun auto/0},
+     {["reload", {"name", string}], "Reload a Vera", fun reload/1},
+     {["alive", {"name", string}], "Check a Vera heartbeat", fun alive/1},
+     {["start", {"name", string}, {"host", string}], "Start a Vera client", fun start/2}
     ].
+
+reload(Name) ->
+    case autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            vera_client:reload(PID),
+            {ok, "Instructed the Vera to reload"}
+    end.
+
+alive(Name) ->
+    case autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            case vera_client:alive(PID) of
+                ok ->
+                    {ok, "Vera appears alive"}
+            end
+    end.
 
 discover() ->
     F = fun(D) ->

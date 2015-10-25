@@ -16,5 +16,5 @@ init(master) ->
 init(child) ->
     {ok, {{simple_one_for_one, 10, 60},
           [
-           {vera_client, {vera_client, start_link, []}, transient, 5000, worker, [vera_client]}
+           {vera_client, {vera_client, start_link, []}, temporary, 5000, worker, [vera_client]}
           ]}}.

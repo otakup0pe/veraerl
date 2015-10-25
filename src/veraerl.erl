@@ -3,7 +3,8 @@
 -export([main/1, start_link/0, start_child/1, start_child/2, pid/1]).
 -export([init/1, handle_call/3, handle_info/2]).
 
--record(state, {vera_client=[]}).
+-record(vera, {pid, name, host}).
+-record(state, {veras=[]}).
 
 main(_Commands) ->
     application:load(veraerl),
@@ -20,37 +21,48 @@ start_child(Host, Name) ->
     {ok, _PID} = gen_server:call(?MODULE, {start_child, Host, Name}).
 
 pid(Name) ->
-    {ok, PID} = gen_server:call(?MODULE, {pid, Name}),
-    PID.
+    case gen_server:call(?MODULE, {pid, Name}) of
+        {ok, PID} -> PID;
+        {error, _} = E -> E
+    end.
 
 init([]) ->
     {ok, #state{}}.
 
-handle_call({pid, Name}, _From, #state{vera_client = VC} = State) ->
-    case lists:keysearch(Name, 1, VC) of
+handle_call({pid, Name}, _From, #state{veras = VC} = State) ->
+    case lists:keysearch(Name, #vera.name, VC) of
         false ->
             {reply, {error, badarg}, State};
-        {value, {Name, PID}} ->
+        {value, #vera{name = Name, pid = PID}} ->
             {reply, {ok, PID}, State}
     end;
-handle_call({start_child, Host, Name}, _From, #state{vera_client = VC} = State) ->
-    case lists:keysearch(Name, 1, VC) of
+handle_call({start_child, Host, Name}, _From, State) ->
+    case p_start_child(Host, Name, State) of
+        {PID, NewState} when is_pid(PID) ->
+            {reply, {ok, PID}, NewState};
+        {error, _} = E ->
+            {reply, E, State}
+    end.
+
+p_start_child(Host, Name, #state{veras = VC} = State) ->
+    case lists:keysearch(Name, #vera.name, VC) of
         false ->
             case supervisor:start_child(veraerl_child_sup, [Host]) of
                 {ok, PID} ->
                     erlang:monitor(process, PID),
-                    {reply, {ok, PID}, State#state{vera_client = [{Name, PID}|VC]}}
+                    {PID, State#state{veras = [#vera{name=Name,host=Host,pid=PID}|VC]}}
             end;
         {value, {Name, _PID}} ->
-            {reply, {error, already_started}, State}
+            {{error, already_started}, State}
     end.
 
-handle_info({'DOWN', _Ref, process, PID, _Info}, #state{vera_client = VC} = State) ->
-    case lists:member(PID, VC) of
+handle_info({'DOWN', _Ref, process, PID, _Info}, #state{veras = VC} = State) ->
+    case lists:keysearch(PID, #vera.pid, VC) of
         false ->
             {noreply, State};
-        true ->
-            {noreply, State#state{vera_client = lists:keyremove(PID, 2, VC)}}
+        {value, #vera{name=Name,host=Host}} ->
+            {_PID, State0} = p_start_child(Host, Name, State#state{veras = lists:keydelete(PID, #vera.pid, VC)}),
+            {noreply, State0}
     end.
 
 block_until_done(PID) ->

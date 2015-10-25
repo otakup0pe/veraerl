@@ -13,25 +13,48 @@ commands() ->
     ].
 
 device_list(Name) ->
-    Devices = vera_client:device_list(veraerl:pid(Name)),
-    {ok, lists:map(fun({ID, DName}) ->
-                          io_lib:format("#~4..0B ~p~n", [ID, binary_to_list(DName)])
-                   end, Devices)}.
+    case veraerl_shell:autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            Devices = vera_client:device_list(PID),
+            {ok, lists:map(fun({ID, DName}) ->
+                                   io_lib:format("#~4..0B ~p~n", [ID, binary_to_list(DName)])
+                           end, Devices)}
+    end.
 
 device_off(Name, DName) ->
-    vera_client:device_power(veraerl:pid(Name), vera_client:device_id(veraerl:pid(Name), list_to_binary(DName)), off),
-    {ok, "Turned off"}.
+    case veraerl_shell:autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            vera_client:device_power(PID, vera_client:device_id(PID, list_to_binary(DName)), off),
+            {ok, "Turned off"}
+    end.
 
 device_on(Name, DName) ->
-    vera_client:device_power(veraerl:pid(Name), vera_client:device_id(veraerl:pid(Name), list_to_binary(DName)), on),
-    {ok, "Turned on"}.
+    case veraerl_shell:autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            vera_client:device_power(PID, vera_client:device_id(PID, list_to_binary(DName)), on),
+            {ok, "Turned on"}
+    end.
 
 device_vars(Name, DName) ->
-    {ok, lists:map(fun(PL) ->
-                           F = fun(K) ->
-                                       string:strip(binary_to_list(proplists:get_value(K, PL)))
-                               end,
-                           Service = lists:sublist(string:tokens(F(<<"service">>), ":"), 4, 1),
-                           Variable = F(<<"variable">>),
-                           string:left(Service, 20) ++ string:left(Variable, 20) ++ F(<<"value">>) ++ "DONG\n"
-                   end, vera_client:device_vars(veraerl:pid(Name), vera_client:device_id(veraerl:pid(Name), list_to_binary(DName))))}.
+    DFun = fun(String) ->
+                   string:left(String, 20) ++ " "
+           end,
+    case veraerl_shell:autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            {ok, lists:map(fun(PL) ->
+                                   F = fun(K) ->
+                                               string:strip(binary_to_list(proplists:get_value(K, PL)))
+                                       end,
+                                   [Service] = lists:sublist(string:tokens(F(<<"service">>), ":"), 4, 1),
+                                   Variable = F(<<"variable">>),
+                                   DFun(Service) ++ DFun(Variable) ++ F(<<"value">>) ++ "\n"
+                           end, vera_client:device_vars(PID, vera_client:device_id(PID, list_to_binary(DName))))}
+    end.
