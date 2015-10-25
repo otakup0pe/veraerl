@@ -6,16 +6,17 @@
 
 commands() ->
     [
-     {["list", {"vera", auto}], "Device Listing", fun device_list/1},
-     {["switch", {"vera", auto}, "on", {"name", string}], "Switch somethign on", fun device_on/2},
-     {["switch", {"vera", auto}, "off", {"name", string}], "Switch something off", fun device_off/2},
-     {["vars", {"vera", auto}, {"name", string}], "Device variables", fun device_vars/2}
+     {["list", {"vera", string}], "Device Listing", fun device_list/1},
+     {["switch", {"vera", string}, "on", {"name", string}], "Switch something on", fun device_on/2},
+     {["switch", {"vera", string}, "off", {"name", string}], "Switch something off", fun device_off/2},
+     {["vars", {"vera", string}, {"name", string}], "Device variables", fun device_vars/2}
     ].
 
 device_list(Name) ->
+    Devices = vera_client:device_list(veraerl:pid(Name)),
     {ok, lists:map(fun({ID, DName}) ->
                           io_lib:format("#~4..0B ~p~n", [ID, binary_to_list(DName)])
-                   end, vera_client:device_list(veraerl:pid(Name)))}.
+                   end, Devices)}.
 
 device_off(Name, DName) ->
     vera_client:device_power(veraerl:pid(Name), vera_client:device_id(veraerl:pid(Name), list_to_binary(DName)), off),
