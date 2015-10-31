@@ -9,7 +9,7 @@
 main(_Commands) ->
     application:load(veraerl),
     veraerl_util:bootstrap(),
-    block_until_done(user_drv:start(['tty_sl -c -e', {shellbeam, spawn_shell, [[magicbeam_shell, veraerl_shell, veraerl_device_shell], "Vera"]}])).
+    block_until_done(user_drv:start(['tty_sl -c -e', {shellbeam, spawn_shell, [[magicbeam_shell, veraerl_shell], "Vera"]}])).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
