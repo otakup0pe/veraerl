@@ -2,16 +2,22 @@
 
 -export([start_link/1, start_link/2]).
 -export([init/1, handle_cast/2, handle_call/3]).
--export([device_list/1, device_power/3, device_id/2, device_vars/2, device_var_key/3]).
+-export([device_list/1, device_power/3, device_id/2, device_vars/2, device_var_key/3, device_name/2]).
 -export([scene_list/1, scene_id/2, scene/2]).
+-export([room_list/1]).
+
 -export([job/2, reload/1, alive/1]).
 
--record(state, {host}).
+-record(state, {host, session, pkid}).
 
 start_link(Host) when is_list(Host) ->
-    gen_server:start_link(?MODULE, [Host], []).
+    start_link({local, Host});
+start_link(Connection) when is_tuple(Connection) ->
+    gen_server:start_link(?MODULE, Connection, []).
 start_link(Name, Host) when is_list(Host) ->
-    gen_server:start_link(Name, ?MODULE, [Host], []).
+    start_link(Name, {local, Host});
+start_link(Name, Connection) when is_tuple(Connection) ->
+    gen_server:start_link(Name, ?MODULE, Connection, []).
 
 reload(PID) ->
     gen_server:cast(PID, reload).
@@ -43,6 +49,16 @@ device_id(PID, Name, [{ID, Name}|T], R) ->
     device_id(PID, Name, T, [ID|R]);
 device_id(PID, Name, [_|T], R) ->
     device_id(PID, Name, T, R).
+
+device_name(PID, ID) when is_pid(PID), is_integer(ID) ->
+    device_name(ID, device_list(PID));
+device_name(ID, [{ID, Name}|_T]) ->
+    Name;
+device_name(ID, [_|T]) ->
+    device_name(ID, T);
+device_name(_ID, []) ->
+    undefined.
+
 device_vars(PID, ID) when is_integer(ID) ->
     {ok, R} = gen_server:call(PID, {device_vars, ID}),
     R.
@@ -65,6 +81,10 @@ scene_list(PID) ->
     {ok, R} = gen_server:call(PID, scene_list),
     R.
 
+room_list(PID) ->
+    {ok, R} = gen_server:call(PID, room_list),
+    R.
+
 scene_id(PID, Name) when is_list(Name) ->
     scene_id(PID, list_to_binary(Name));
 scene_id(PID, Name) when is_binary(Name) ->
@@ -78,11 +98,13 @@ scene_id(PID, Name) when is_binary(Name) ->
 scene(PID, ID) when is_integer(ID) ->
     gen_server:cast(PID, {scene, ID}).
 
-init([Host]) ->
-    {ok, #state{host = Host}}.
+init({local, Host}) ->
+    {ok, #state{host = Host}};
+init({remote, RelayServer, PKID, Session}) ->
+    {ok, #state{host = RelayServer, session = Session, pkid = PKID}}.
 
-handle_call(device_list, _From, #state{host=H} = State) ->
-    case veraerl_util:hit_vera(H, [{"id", "sdata"}], get) of
+handle_call(device_list, _From, State) ->
+    case hit_vera([{"id", "sdata"}], State) of
         PL when is_list(PL) ->
             case proplists:get_value(<<"devices">>, PL) of
                 Dev when is_list(Dev) ->
@@ -95,22 +117,36 @@ handle_call(device_list, _From, #state{host=H} = State) ->
                     {reply, {ok, lists:map(F0, Dev)}, State}
             end
     end;
-handle_call(scene_list, _From, #state{host=H} = State) ->
-    case veraerl_util:hit_vera(H, [{"id", "sdata"}], get) of
+handle_call(scene_list, _From, State) ->
+    case hit_vera([{"id", "sdata"}], State) of
         PL when is_list(PL) ->
             case proplists:get_value(<<"scenes">>, PL) of
-                Dev when is_list(Dev) ->
+                Scene when is_list(Scene) ->
                     F0 = fun(K0) when is_list(K0) ->
                                  F = fun(K) ->
                                              proplists:get_value(K, K0)
                                      end,
                                  {F(<<"id">>), F(<<"name">>)}
                          end,
-                    {reply, {ok, lists:map(F0, Dev)}, State}
+                    {reply, {ok, lists:map(F0, Scene)}, State}
+            end
+    end;
+handle_call(room_list, _From, State) ->
+    case hit_vera([{"id", "sdata"}], State) of
+        PL when is_list(PL) ->
+            case proplists:get_value(<<"rooms">>, PL) of
+                Room when is_list(Room) ->
+                    F0 = fun(K0) when is_list(K0) ->
+                                 F = fun(K) ->
+                                             proplists:get_value(K, K0)
+                                     end,
+                                 {F(<<"id">>), F(<<"name">>)}
+                         end,
+                    {reply, {ok, lists:map(F0, Room)}, State}
             end
     end;
 
-handle_call({device_power, ID, P}, _From, #state{host=H} = State) ->
+handle_call({device_power, ID, P}, _From, State) ->
     PL = [
           {"id", "action"},
           {"DeviceNum", integer_to_list(ID)},
@@ -121,7 +157,7 @@ handle_call({device_power, ID, P}, _From, #state{host=H} = State) ->
                                                 P == off ->
                                                      0
                                              end)}],
-    case veraerl_util:hit_vera(H, PL, get) of
+    case hit_vera(PL, State) of
         PL1 when is_list(PL1) ->
             case proplists:get_value(<<"u:SetTargetResponse">>, PL1) of
                 PL0 when is_list(PL0) ->
@@ -135,12 +171,12 @@ handle_call({device_power, ID, P}, _From, #state{host=H} = State) ->
                     end
             end
     end;
-handle_call({job, ID}, _From, #state{host=H} = State) ->
+handle_call({job, ID}, _From, State) ->
     PL = [
           {"id", "jobstatus"},
           {"job", integer_to_list(ID)}
          ],
-    case veraerl_util:hit_vera(H, PL, get) of
+    case hit_vera(PL, State) of
         PL when is_list(PL) ->
             F = fun
                     (-1) -> undefined;
@@ -155,12 +191,12 @@ handle_call({job, ID}, _From, #state{host=H} = State) ->
                 end,
             {reply, {ok, F(proplists:get_value(<<"status">>, PL))}, State}
     end;
-handle_call({device_vars, ID}, _From, #state{host=H} = State) ->
+handle_call({device_vars, ID}, _From, State) ->
     PL = [
           {"id","status"},
           {"DeviceNum", integer_to_list(ID)}
          ],
-    case veraerl_util:hit_vera(H, PL, get) of
+    case hit_vera(PL, State) of
         PL1 when is_list(PL1) ->
             case proplists:get_value(list_to_binary("Device_Num_" ++ integer_to_list(ID)), PL1) of
                 PL0 when is_list(PL0) ->
@@ -170,11 +206,11 @@ handle_call({device_vars, ID}, _From, #state{host=H} = State) ->
                     end
             end
     end;
-handle_call(alive, _From, #state{host=H} = State) ->
+handle_call(alive, _From, State) ->
     PL = [
           {"id", "alive"}
          ],
-    case veraerl_util:hit_vera(H, PL, get) of
+    case hit_vera(PL, State) of
         ok ->
             {reply, ok, State}
     end.
@@ -186,11 +222,16 @@ handle_cast({scene, ID}, #state{host=H} = State) ->
           {"action", "RunScene"},
           {"SceneNum",integer_to_list(ID)}
          ],
-    veraerl_util:hit_vera(H, PL, get),
+    hit_vera(H, PL),
     {noreply, State};
 handle_cast(reload, #state{host=H} = State) ->
     PL = [
           {"id", "reload"}
          ],
-    veraerl_util:hit_vera(H, PL, get),
+    hit_vera(H, PL),
     {noreply, State}.
+
+hit_vera(Suffix, #state{pkid = undefined, host = Host}) ->
+    veraerl_util:local_vera(Host, Suffix);
+hit_vera(Suffix, #state{pkid=PKID, host=Host, session=Session}) ->
+    veraerl_util:remote_vera(Host, Suffix, Session, PKID).

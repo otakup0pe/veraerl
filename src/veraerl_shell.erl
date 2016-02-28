@@ -11,7 +11,7 @@ autopid(Name) when is_list(Name) ->
             PID;
         {error, badarg} ->
             {error, "Invalid Vera name - did you start it?"}
-    end.                
+    end.
                 
 commands() ->
     [
@@ -60,9 +60,8 @@ auto() ->
             {ok, "No veras found", []};
         [H|_] ->
             case proplists:get_value(ip, H) of
-                IP when is_binary(IP) ->
-                    IPs = binary_to_list(IP),
-                    veraerl:start_child(IPs, "auto"),
-                    {ok, "Configured ~p as auto", [IPs]}
+                IP when is_list(IP) ->
+                    veraerl:start_child(IP, "auto"),
+                    {ok, "Configured ~p as auto", [IP]}
             end
     end.
