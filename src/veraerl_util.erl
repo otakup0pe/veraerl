@@ -74,7 +74,9 @@ discover(Url, AccountSession) ->
                         Devices when is_list(Devices) ->
                             lists:map(fun distill_device/1, Devices)
                     end
-            end
+            end;
+        {ok, {{_, 401, _}, _H, _Body}} ->
+            {error, auth}
     end.
 
 bootstrap() ->
@@ -156,7 +158,9 @@ get_device(Server, AccountSession, PKID) ->
                                ]
                      }
                     ]
-            end
+            end;
+        {ok, {{_, 401, _}, _H, _Body}} ->
+            {error, auth}
     end.
 
 decode_token(AuthToken) ->
