@@ -1,6 +1,6 @@
 -module(veraerl_util).
--export([local_vera/2, remote_vera/4, discover/0, discover/1, bootstrap/0]).
--export([login/2, get_session/3, get_device/3]).
+-export([local_vera/2, remote_vera/4, discover/0, discover/3, bootstrap/0]).
+-export([login/2, get_session/3, get_device/3, decode_token/1, device_session/4, relay_session/5]).
 -include("veraerl.hrl").
 
 distill_suffix(S) ->
@@ -16,7 +16,11 @@ remote_vera(Host, Suffix, Session, PKID) ->
         {ok, {{_, 200, _}, _H, <<"OK">>}} ->
             ok;
         {ok, {{_, 200, _}, _H, Body}} ->
-            jsx:decode(Body)
+            jsx:decode(Body);
+        {ok, {{_, 401, _}, _H, _Body}} ->
+            {error, auth};
+        {error,socket_closed_remotely} ->
+            {error, network}
     end.
 
 local_vera(Host, Suffix) ->
@@ -33,24 +37,30 @@ distill_device(Device) when is_list(Device) ->
                 case proplists:get_value(K, Device) of
                     V when is_binary(V) ->
                         binary_to_list(V);
-                    V when V /= undefined ->
+                    V ->
                         V
                 end
         end,
-    [
+    FF = fun
+             ({_, undefined}) -> false;
+             (_) -> true
+         end,
+    lists:filter(FF, [
      {ip, F(<<"InternalIP">>)},
      {mac, F(<<"MacAddress">>)},
-     {id, F(<<"PK_Device">>)},
-     {servers, [
+     {id, list_to_integer(F(<<"PK_Device">>))},
+     {servers, lists:filter(FF, [
                 {device, F(<<"Server_Device">>)},
                 {account, F(<<"Server_Account">>)}
-               ]}
-    ].
+               ])}
+    ]).
 
 discover() ->
-    discover(undefined).
-discover(AccountSession) ->
-    Url = "https://vera-us-oem-authd.mios.com/locator/locator/locator",
+    discover("https://vera-us-oem-authd.mios.com/locator/locator/locator",undefined).
+discover(Server, PK_Account, AccountSession) when is_list(Server), is_integer(PK_Account), is_list(AccountSession) ->
+    discover("https://" ++ Server ++ "/account/account/account/" ++ integer_to_list(PK_Account) ++ "/devices", AccountSession).
+
+discover(Url, AccountSession) ->
     Headers = if AccountSession == undefined ->
                       [];
                  true ->
@@ -124,8 +134,8 @@ get_session(Server, AuthToken, AuthSig) ->
 
 login(User, Password) ->
     case get_auth(User, Password) of
-        {ok, AuthToken, AuthSig, Server} ->
-            case get_session(Server, AuthToken, AuthSig) of
+        {ok, AuthToken, AuthSig, AuthServer} ->
+            case get_session(AuthServer, AuthToken, AuthSig) of
                 {ok, Session} ->
                     {ok, AuthToken, AuthSig, Session}
             end
@@ -138,7 +148,7 @@ get_device(Server, AccountSession, PKID) ->
             case jsx:decode(Body) of
                 JSON when is_list(JSON) ->
                     F = fun(K) ->
-                                proplists:get_value(list_to_binary(K), JSON)
+                                binary_to_list(proplists:get_value(list_to_binary(K), JSON))
                         end,
                     [
                      {servers, [
@@ -147,4 +157,38 @@ get_device(Server, AccountSession, PKID) ->
                      }
                     ]
             end
+    end.
+
+decode_token(AuthToken) ->
+    case jsx:decode(base64:decode(AuthToken)) of
+        PL when is_list(PL) ->
+            F = fun(K) ->
+                        proplists:get_value(K, PL)
+                end,
+            {ok, binary_to_list(F(<<"Server_Auth">>)), F(<<"PK_Account">>)}
+    end.
+
+relay_session(Device, AT, AS, DServer, DSession) ->
+    case veraerl_util:get_device(DServer, DSession, Device) of
+        PL when is_list(PL) ->
+            RServer = proplists:get_value(relay, proplists:get_value(servers, PL)),
+            case veraerl_util:get_session(RServer, AT, AS) of
+                {ok, RSession} ->
+                    {ok, RServer, RSession}
+            end
+    end.
+
+device_session(Device, AT, AS, [DObj|T]) ->
+    F = fun(K) ->
+                proplists:get_value(K, DObj)
+        end,
+    case F(id) of
+        Device ->
+            DServer = proplists:get_value(device, F(servers)),
+            case veraerl_util:get_session(DServer, AT, AS) of
+                {ok, DSession} ->
+                    {ok, DServer, DSession}
+            end;
+        undefined ->
+            device_session(Device, AT, AS, T)
     end.

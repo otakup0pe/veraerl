@@ -34,7 +34,7 @@ device_list(PID) ->
     R.
 
 device_power(PID, Device, P) ->
-    {ok, R} = gen_server:call(PID, {device_power, Device, P}),
+    {ok, R} = gen_server:call(PID, {device_power, Device, P}, 10000),
     R.
 
 device_id(PID, Name) when is_list(Name) ->
@@ -75,7 +75,9 @@ device_var_key(PID, ID, Key, [PL|T]) ->
             proplists:get_value(<<"value">>, PL);
         _ ->
             device_var_key(PID, ID, Key, T)
-    end.
+    end;
+device_var_key(_PID, _ID, _Key, {error, _} = E) ->
+    E.
 
 scene_list(PID) ->
     {ok, R} = gen_server:call(PID, scene_list),
@@ -88,11 +90,16 @@ room_list(PID) ->
 scene_id(PID, Name) when is_list(Name) ->
     scene_id(PID, list_to_binary(Name));
 scene_id(PID, Name) when is_binary(Name) ->
-    case lists:keysearch(Name, 2, scene_list(PID)) of
-        false ->
-            undefined;
-        {value, {ID, Name}} ->
-            ID
+    case scene_list(PID) of
+        SL when is_list(SL) ->
+            case lists:keysearch(Name, 2, SL) of
+                false ->
+                    undefined;
+                {value, {ID, Name}} ->
+                    ID
+            end;
+        {error, _} = E ->
+            E
     end.
 
 scene(PID, ID) when is_integer(ID) ->
@@ -115,7 +122,9 @@ handle_call(device_list, _From, State) ->
                                  {F(<<"id">>), F(<<"name">>)}
                          end,
                     {reply, {ok, lists:map(F0, Dev)}, State}
-            end
+            end;
+        {error, _} = E ->
+            {ok, E}
     end;
 handle_call(scene_list, _From, State) ->
     case hit_vera([{"id", "sdata"}], State) of
@@ -129,7 +138,9 @@ handle_call(scene_list, _From, State) ->
                                  {F(<<"id">>), F(<<"name">>)}
                          end,
                     {reply, {ok, lists:map(F0, Scene)}, State}
-            end
+            end;
+        {error, _} = E ->
+            {ok, E}
     end;
 handle_call(room_list, _From, State) ->
     case hit_vera([{"id", "sdata"}], State) of
@@ -143,7 +154,9 @@ handle_call(room_list, _From, State) ->
                                  {F(<<"id">>), F(<<"name">>)}
                          end,
                     {reply, {ok, lists:map(F0, Room)}, State}
-            end
+            end;
+        {error, _} = E ->
+            {ok, E}
     end;
 
 handle_call({device_power, ID, P}, _From, State) ->
@@ -165,11 +178,14 @@ handle_call({device_power, ID, P}, _From, State) ->
                                 proplists:get_value(K, PL0)
                         end,
                     case {F(<<"JobID">>), F(<<"OK">>)} of
-                        {undefined, <<"OK">>} -> ok;
+                        {undefined, <<"OK">>} -> 
+                            {reply, {ok, ok}, State};
                         {Job, undefined} when is_binary(Job) ->
                             {reply, {ok, list_to_integer(binary_to_list(Job))}, State}
                     end
-            end
+            end;
+        {error, _} = E ->
+            {ok, E}
     end;
 handle_call({job, ID}, _From, State) ->
     PL = [
@@ -189,7 +205,9 @@ handle_call({job, ID}, _From, State) ->
                     (6) -> requeue;
                     (7) -> pending
                 end,
-            {reply, {ok, F(proplists:get_value(<<"status">>, PL))}, State}
+            {reply, {ok, F(proplists:get_value(<<"status">>, PL))}, State};
+        {error, _} = E ->
+            {ok, E}
     end;
 handle_call({device_vars, ID}, _From, State) ->
     PL = [
@@ -204,7 +222,9 @@ handle_call({device_vars, ID}, _From, State) ->
                         V when is_list(V) ->
                             {reply, {ok, V}, State}
                     end
-            end
+            end;
+        {error, _} = E ->
+            {ok, E}
     end;
 handle_call(alive, _From, State) ->
     PL = [
@@ -212,23 +232,25 @@ handle_call(alive, _From, State) ->
          ],
     case hit_vera(PL, State) of
         ok ->
-            {reply, ok, State}
+            {reply, ok, State};
+        {error, _} = E ->
+            {ok, E}
     end.
 
-handle_cast({scene, ID}, #state{host=H} = State) ->
+handle_cast({scene, ID}, State) ->
     PL = [
           {"id", "action"},
           {"serviceId", "urn:micasaverde-com:serviceId:HomeAutomationGateway1"},
           {"action", "RunScene"},
           {"SceneNum",integer_to_list(ID)}
          ],
-    hit_vera(H, PL),
+    hit_vera(PL, State),
     {noreply, State};
-handle_cast(reload, #state{host=H} = State) ->
+handle_cast(reload, State) ->
     PL = [
           {"id", "reload"}
          ],
-    hit_vera(H, PL),
+    hit_vera(PL, State),
     {noreply, State}.
 
 hit_vera(Suffix, #state{pkid = undefined, host = Host}) ->
