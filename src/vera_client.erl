@@ -1,12 +1,12 @@
 -module(vera_client).
 
 -export([start_link/1, start_link/2]).
--export([init/1, handle_cast/2, handle_call/3]).
+-export([init/1, handle_call/3]).
 -export([device_list/1, device_power/3, device_id/2, device_vars/2, device_var_key/3, device_name/2]).
 -export([scene_list/1, scene_id/2, scene/2]).
 -export([room_list/1]).
-
 -export([job/2, reload/1, alive/1]).
+-export([auth/2]).
 
 -record(state, {host, session, pkid}).
 
@@ -19,23 +19,31 @@ start_link(Name, Host) when is_list(Host) ->
 start_link(Name, Connection) when is_tuple(Connection) ->
     gen_server:start_link(Name, ?MODULE, Connection, []).
 
+call(PID, MSG) ->
+    case gen_server:call(PID, MSG, 10000) of
+        {ok, Reply} ->
+            Reply;
+        {error, _} = E ->
+            E
+    end.
+
+auth(PID, Auth) ->
+    call(PID, {auth, Auth}).
+
 reload(PID) ->
-    gen_server:cast(PID, reload).
+    call(PID, reload).
 
 alive(PID) ->
-    gen_server:call(PID, alive).
+    call(PID, alive).
 
 job(PID, ID) ->
-    {ok, R} = gen_server:call(PID, {job, ID}),
-    R.
+    call(PID, {job, ID}).
 
 device_list(PID) ->
-    {ok, R} = gen_server:call(PID, device_list),
-    R.
+    call(PID, device_list).
 
 device_power(PID, Device, P) ->
-    {ok, R} = gen_server:call(PID, {device_power, Device, P}, 10000),
-    R.
+    call(PID, {device_power, Device, P}).
 
 device_id(PID, Name) when is_list(Name) ->
     device_id(PID, list_to_binary(Name));
@@ -60,8 +68,7 @@ device_name(_ID, []) ->
     undefined.
 
 device_vars(PID, ID) when is_integer(ID) ->
-    {ok, R} = gen_server:call(PID, {device_vars, ID}),
-    R.
+    call(PID, {device_vars, ID}).
 
 device_var_key(PID, ID, Key) ->
     device_var_key(PID, ID, Key, device_vars(PID, ID)).
@@ -80,12 +87,10 @@ device_var_key(_PID, _ID, _Key, {error, _} = E) ->
     E.
 
 scene_list(PID) ->
-    {ok, R} = gen_server:call(PID, scene_list),
-    R.
+    call(PID, scene_list).
 
 room_list(PID) ->
-    {ok, R} = gen_server:call(PID, room_list),
-    R.
+    call(PID, room_list).
 
 scene_id(PID, Name) when is_list(Name) ->
     scene_id(PID, list_to_binary(Name));
@@ -103,7 +108,7 @@ scene_id(PID, Name) when is_binary(Name) ->
     end.
 
 scene(PID, ID) when is_integer(ID) ->
-    gen_server:cast(PID, {scene, ID}).
+    gen_server:call(PID, {scene, ID}).
 
 init({local, Host}) ->
     {ok, #state{host = Host}};
@@ -124,7 +129,7 @@ handle_call(device_list, _From, State) ->
                     {reply, {ok, lists:map(F0, Dev)}, State}
             end;
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 handle_call(scene_list, _From, State) ->
     case hit_vera([{"id", "sdata"}], State) of
@@ -140,7 +145,7 @@ handle_call(scene_list, _From, State) ->
                     {reply, {ok, lists:map(F0, Scene)}, State}
             end;
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 handle_call(room_list, _From, State) ->
     case hit_vera([{"id", "sdata"}], State) of
@@ -156,7 +161,7 @@ handle_call(room_list, _From, State) ->
                     {reply, {ok, lists:map(F0, Room)}, State}
             end;
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 
 handle_call({device_power, ID, P}, _From, State) ->
@@ -185,7 +190,7 @@ handle_call({device_power, ID, P}, _From, State) ->
                     end
             end;
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 handle_call({job, ID}, _From, State) ->
     PL = [
@@ -207,7 +212,7 @@ handle_call({job, ID}, _From, State) ->
                 end,
             {reply, {ok, F(proplists:get_value(<<"status">>, PL))}, State};
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 handle_call({device_vars, ID}, _From, State) ->
     PL = [
@@ -224,7 +229,7 @@ handle_call({device_vars, ID}, _From, State) ->
                     end
             end;
         {error, _} = E ->
-            {ok, E}
+            {reply, E, State}
     end;
 handle_call(alive, _From, State) ->
     PL = [
@@ -232,28 +237,36 @@ handle_call(alive, _From, State) ->
          ],
     case hit_vera(PL, State) of
         ok ->
-            {reply, ok, State};
+            {reply, {ok, ok}, State};
         {error, _} = E ->
-            {ok, E}
-    end.
-
-handle_cast({scene, ID}, State) ->
+            {reply, E, State}
+    end;
+handle_call({scene, ID}, _From, State) ->
     PL = [
           {"id", "action"},
           {"serviceId", "urn:micasaverde-com:serviceId:HomeAutomationGateway1"},
           {"action", "RunScene"},
           {"SceneNum",integer_to_list(ID)}
          ],
-    hit_vera(PL, State),
-    {noreply, State};
-handle_cast(reload, State) ->
+    case hit_vera(PL, State) of
+        ok ->
+            {reply, {ok, ok}, State};
+        {error, _} = E ->
+            {reply, E, State}
+    end;
+handle_call(reload, _From, State) ->
     PL = [
           {"id", "reload"}
          ],
-    hit_vera(PL, State),
-    {noreply, State}.
+    case hit_vera(PL, State) of
+        ok ->
+            {reply, {ok, ok}, State};
+        {error, _} = E ->
+            {reply, E, State}
+    end.
 
 hit_vera(Suffix, #state{pkid = undefined, host = Host}) ->
     veraerl_util:local_vera(Host, Suffix);
 hit_vera(Suffix, #state{pkid=PKID, host=Host, session=Session}) ->
     veraerl_util:remote_vera(Host, Suffix, Session, PKID).
+

@@ -10,17 +10,27 @@ distill_suffix([], R) ->
 distill_suffix([{K, V}|T], R) ->
     distill_suffix(T, R ++ "&" ++ K ++ "=" ++ V).
 
-remote_vera(Host, Suffix, Session, PKID) ->
-    Url = "https://" ++ Host ++ "/relay/relay/relay/device/" ++ integer_to_list(PKID) ++ "/port_3480/data_request?output_format=json" ++ distill_suffix(Suffix),
-    case httpc:request(get, {Url, [{"MMSSession", Session}]}, [], [{body_format, binary}]) of
+vera_request(Method, Request) ->
+    case httpc:request(Method, Request, [], [{body_format, binary}]) of
         {ok, {{_, 200, _}, _H, <<"OK">>}} ->
             ok;
         {ok, {{_, 200, _}, _H, Body}} ->
-            jsx:decode(Body);
+            {ok, Body};
         {ok, {{_, 401, _}, _H, _Body}} ->
             {error, auth};
         {error,socket_closed_remotely} ->
             {error, network}
+    end.
+
+remote_vera(Host, Suffix, Session, PKID) ->
+    Url = "https://" ++ Host ++ "/relay/relay/relay/device/" ++ integer_to_list(PKID) ++ "/port_3480/data_request?output_format=json" ++ distill_suffix(Suffix),
+    case vera_request(get, {Url, [{"MMSSession", Session}]}) of
+        ok ->
+            ok;
+        {ok, Body} when is_binary(Body) ->
+            jsx:decode(Body);
+        {error, _} = E ->
+            E
     end.
 
 local_vera(Host, Suffix) ->
@@ -48,7 +58,10 @@ distill_device(Device) when is_list(Device) ->
     lists:filter(FF, [
      {ip, F(<<"InternalIP">>)},
      {mac, F(<<"MacAddress">>)},
-     {id, list_to_integer(F(<<"PK_Device">>))},
+     {id, case F(<<"PK_Device">>) of
+              I when is_integer(I) -> I;
+              L when is_list(L) -> list_to_integer(L)
+          end},
      {servers, lists:filter(FF, [
                 {device, F(<<"Server_Device">>)},
                 {account, F(<<"Server_Account">>)}
@@ -66,8 +79,8 @@ discover(Url, AccountSession) ->
                  true ->
                       [{"MMSSession", AccountSession}]
               end,
-    case httpc:request(get, {Url, Headers}, [], [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _H, Body}} ->
+    case vera_request(get, {Url, Headers}) of
+        {ok, Body} when is_binary(Body) ->
             case jsx:decode(Body) of
                 JSON when is_list(JSON) ->
                     case proplists:get_value(<<"Devices">>, JSON) of
@@ -75,8 +88,8 @@ discover(Url, AccountSession) ->
                             lists:map(fun distill_device/1, Devices)
                     end
             end;
-        {ok, {{_, 401, _}, _H, _Body}} ->
-            {error, auth}
+        {error, _} = E ->
+            E
     end.
 
 bootstrap() ->
@@ -112,15 +125,17 @@ get_auth(User, Password) when is_binary(Password) ->
     get_auth(User, binary_to_list(Password));
 get_auth(User, Password) when is_list(User), is_list(Password) ->
     Url = ?MIOS_AUTH_SERVER ++ "autha/auth/username/" ++ User ++ "?SHA1Password=" ++ hash_pass(User, Password) ++ "&PK_Oem=1",
-    case httpc:request(get, {Url, []}, [], [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _H, Body}} ->
+    case vera_request(get, {Url, []}) of
+        {ok, Body} when is_binary(Body) ->
             case jsx:decode(Body) of
                 PL when is_list(PL) ->
                     F = fun(K) ->
                                 binary_to_list(proplists:get_value(K, PL))
                         end,
                     {ok, F(<<"Identity">>), F(<<"IdentitySignature">>), F(<<"Server_Account">>)}
-            end
+            end;
+        {error, _} = E ->
+            E
     end.
 
 get_session(Server, AuthToken, AuthSig) ->
@@ -129,8 +144,8 @@ get_session(Server, AuthToken, AuthSig) ->
                {"MMSAuth", AuthToken},
                {"MMSAuthSig", AuthSig}
               ],
-    case httpc:request(get, {Url, Headers}, [], [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _H, Body}} when is_binary(Body) ->
+    case vera_request(get, {Url, Headers}) of
+        {ok, Body} when is_binary(Body) ->
             {ok, binary_to_list(Body)}
     end.
 
@@ -140,13 +155,15 @@ login(User, Password) ->
             case get_session(AuthServer, AuthToken, AuthSig) of
                 {ok, Session} ->
                     {ok, AuthToken, AuthSig, Session}
-            end
+            end;
+        {error, _} = E ->
+            E
     end.
 
 get_device(Server, AccountSession, PKID) ->
     Url = "https://" ++ Server ++ "/device/device/device/" ++ integer_to_list(PKID),
-    case httpc:request(get, {Url, [{"MMSSession", AccountSession}]}, [], [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _H, Body}} ->
+    case vera_request(get, {Url, [{"MMSSession", AccountSession}]}) of
+        {ok, Body} when is_binary(Body) ->
             case jsx:decode(Body) of
                 JSON when is_list(JSON) ->
                     F = fun(K) ->
@@ -159,8 +176,8 @@ get_device(Server, AccountSession, PKID) ->
                      }
                     ]
             end;
-        {ok, {{_, 401, _}, _H, _Body}} ->
-            {error, auth}
+        {error, _} = E ->
+            E
     end.
 
 decode_token(AuthToken) ->
