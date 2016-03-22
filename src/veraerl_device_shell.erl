@@ -10,11 +10,21 @@ commands() ->
      {["list", {"vera", string}], "Device Listing", fun device_list/1},
      {["switch", {"vera", string}, "on", {"name", string}], "Switch something on", fun device_on/2},
      {["switch", {"vera", string}, "off", {"name", string}], "Switch something off", fun device_off/2},
+     {["dim", {"vera", string}, {"name", string}, {"dim", integer}], "Device Dim", fun device_dim/3},
      {["vars", {"vera", string}, {"name", string}], "Device variables", fun device_vars/2},
      {["name", {"vera", string}, {"id", integer}], "Device name", fun device_name/2},
      {["id", {"vera", string}, {"name", string}], "Device ID", fun device_id/2}
     ].
 
+device_dim(Name, DName, Dim) ->
+    case veraerl_shell:autopid(Name) of
+        {error, _} = E ->
+            E;
+        PID when is_pid(PID) ->
+            ok = vera_client:device_dim(PID, p_device_id(PID, DName), Dim),
+            {ok, "Adjusted dimmer"}
+    end.
+    
 device_list(Name) ->
     case veraerl_shell:autopid(Name) of
         {error, _} = E ->

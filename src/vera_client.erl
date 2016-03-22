@@ -2,7 +2,8 @@
 
 -export([start_link/1, start_link/2]).
 -export([init/1, handle_call/3]).
--export([device_list/1, device_power/3, device_id/2, device_vars/2, device_var_key/3, device_name/2]).
+-export([device_list/1, device_id/2, device_vars/2, device_var_key/3, device_name/2]).
+-export([device_power/3, device_dim/3]).
 -export([scene_list/1, scene_id/2, scene/2]).
 -export([room_list/1]).
 -export([job/2, reload/1, alive/1]).
@@ -44,6 +45,9 @@ device_list(PID) ->
 
 device_power(PID, Device, P) ->
     call(PID, {device_power, Device, P}).
+
+device_dim(PID, Device, Dim) when is_integer(Dim) ->
+    call(PID, {device_dim, Device, Dim}).
 
 device_id(PID, Name) when is_list(Name) ->
     device_id(PID, list_to_binary(Name));
@@ -163,7 +167,23 @@ handle_call(room_list, _From, State) ->
         {error, _} = E ->
             {reply, E, State}
     end;
-
+handle_call({device_dim, ID, Dim}, _From, State) ->
+    PL = [
+          {"id", "action"},
+          {"DeviceNum", integer_to_list(ID)},
+          {"serviceId", "urn:upnp-org:serviceId:Dimming1"},
+          {"action", "SetLoadLevelTarget"},
+          {"newLoadlevelTarget", integer_to_list(Dim)}
+         ],
+    case hit_vera(PL, State) of
+        PL1 when is_list(PL1) ->
+            case proplists:get_value(<<"u:SetLoadLevelTargetResponse">>, PL1) of
+                [{<<"OK">>,<<"OK">>}] ->
+                    {reply, {ok, ok}, State}
+            end;
+        {error, _} = E ->
+            {reply, E, State}
+    end;
 handle_call({device_power, ID, P}, _From, State) ->
     PL = [
           {"id", "action"},
