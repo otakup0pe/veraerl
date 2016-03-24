@@ -2,7 +2,7 @@
 
 -export([start_link/1, start_link/2]).
 -export([init/1, handle_call/3]).
--export([device_list/1, device_id/2, device_vars/2, device_var_key/3, device_name/2]).
+-export([device_list/1, device_id/2, device_vars/2, device_var_key/3, device_name/2, device_delete/2]).
 -export([device_power/3, device_dim/3]).
 -export([scene_list/1, scene_id/2, scene/2]).
 -export([room_list/1]).
@@ -21,7 +21,7 @@ start_link(Name, Connection) when is_tuple(Connection) ->
     gen_server:start_link(Name, ?MODULE, Connection, []).
 
 call(PID, MSG) ->
-    case gen_server:call(PID, MSG, 10000) of
+    case gen_server:call(PID, MSG, infinity) of
         {ok, Reply} ->
             Reply;
         {error, _} = E ->
@@ -89,6 +89,9 @@ device_var_key(PID, ID, Key, [PL|T]) ->
     end;
 device_var_key(_PID, _ID, _Key, {error, _} = E) ->
     E.
+
+device_delete(PID, ID) when is_integer(ID) ->
+    call(PID, {device_delete, ID}).
 
 scene_list(PID) ->
     call(PID, scene_list).
@@ -277,6 +280,18 @@ handle_call({scene, ID}, _From, State) ->
 handle_call(reload, _From, State) ->
     PL = [
           {"id", "reload"}
+         ],
+    case hit_vera(PL, State) of
+        ok ->
+            {reply, {ok, ok}, State};
+        {error, _} = E ->
+            {reply, E, State}
+    end;
+handle_call({device_delete, ID}, _From, State) ->
+    PL = [
+          {"id", "device"},
+          {"action", "delete"},
+          {"device", integer_to_list(ID)}
          ],
     case hit_vera(PL, State) of
         ok ->

@@ -13,7 +13,8 @@ commands() ->
      {["dim", {"vera", string}, {"name", string}, {"dim", integer}], "Device Dim", fun device_dim/3},
      {["vars", {"vera", string}, {"name", string}], "Device variables", fun device_vars/2},
      {["name", {"vera", string}, {"id", integer}], "Device name", fun device_name/2},
-     {["id", {"vera", string}, {"name", string}], "Device ID", fun device_id/2}
+     {["id", {"vera", string}, {"name", string}], "Device ID", fun device_id/2},
+     {["delete", {"vera", string}, {"id", integer}], "Delete device", fun device_delete/2}
     ].
 
 device_dim(Name, DName, Dim) ->
@@ -93,4 +94,13 @@ device_id(Name, Id) when is_integer(Id) ->
             E;
         PID when is_pid(PID) ->
             {ok, binary_to_list(vera_client:device_id(PID, Id))}
+    end.
+
+device_delete(Name, Id) when is_integer(Id) ->
+    case veraerl_shell:autopid(Name) of
+        {error, E} ->
+            E;
+        PID when is_pid(PID) ->
+            ok = vera_client:device_delete(PID, Id),
+            {ok, "Deleted"}
     end.
