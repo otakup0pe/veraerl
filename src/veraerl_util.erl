@@ -19,6 +19,8 @@ vera_request(Method, Request) ->
         {ok, {{_, 401, _}, _H, _Body}} ->
             {error, auth};
         {error,socket_closed_remotely} ->
+            {error, network};
+        {error, {failed_connect, _E}} ->
             {error, network}
     end.
 

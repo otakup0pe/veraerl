@@ -14,9 +14,9 @@ init({Username, Password, Device}) ->
                          })}.
 
 p_rehash(State) ->
-    p_rehash(State, 5).
+    p_rehash(State, 0).
 
-p_rehash(_State, 0) ->
+p_rehash(_State, 5) ->
     erlang:exit({error, auth});
 p_rehash(#state{username = U, password = P, device = D, pid = undefined} = State, I) ->
     case p_login(U, P, D) of
@@ -30,11 +30,11 @@ p_rehash(#state{username = U, password = P, device = D, pid = undefined} = State
                           }
             end;
         {error, auth} ->
-            timer:sleep(5000),
-            p_rehash(State, I - 1);
+            timer:sleep(5000 * I),
+            p_rehash(State, I + 1);
         {error, network} ->
-            timer:sleep(5000),
-            p_rehash(State, I - 1)
+            timer:sleep(5000 * I),
+            p_rehash(State, I + 1)
     end;
 p_rehash(#state{username = U, password = P, device = D, pid = PID} = State, I) when is_pid(PID) ->
     case p_login(U, P, D) of
