@@ -1,7 +1,7 @@
 -module(vera_client).
 
 -export([start_link/1, start_link/2]).
--export([init/1, handle_call/3]).
+-export([init/1, handle_call/3, terminate/2]).
 -export([device_list/1, device_id/2, device_vars/2, device_var_key/3, device_name/2, device_delete/2]).
 -export([device_power/3, device_dim/3]).
 -export([scene_list/1, scene_id/2, scene/2]).
@@ -272,7 +272,12 @@ handle_call({scene, ID}, _From, State) ->
           {"SceneNum",integer_to_list(ID)}
          ],
     case hit_vera(PL, State) of
-        ok ->
+        PL1 when is_list(PL1) ->
+            case proplists:get_value(<<"u:RunSceneResponse">>, PL1) of
+                [{<<"OK">>,<<"OK">>}] ->
+                    {reply, {ok, ok}, State}
+            end;
+        ok -> % legacy ?
             {reply, {ok, ok}, State};
         {error, _} = E ->
             {reply, E, State}
@@ -300,8 +305,10 @@ handle_call({device_delete, ID}, _From, State) ->
             {reply, E, State}
     end.
 
+terminate(_R, _State) ->
+    ok.
+
 hit_vera(Suffix, #state{pkid = undefined, host = Host}) ->
     veraerl_util:local_vera(Host, Suffix);
 hit_vera(Suffix, #state{pkid=PKID, host=Host, session=Session}) ->
     veraerl_util:remote_vera(Host, Suffix, Session, PKID).
-

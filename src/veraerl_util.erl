@@ -148,7 +148,9 @@ get_session(Server, AuthToken, AuthSig) ->
               ],
     case vera_request(get, {Url, Headers}) of
         {ok, Body} when is_binary(Body) ->
-            {ok, binary_to_list(Body)}
+            {ok, binary_to_list(Body)};
+        {error, _} = E ->
+            E
     end.
 
 login(User, Password) ->
