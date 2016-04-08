@@ -248,7 +248,16 @@ handle_call({device_vars, ID}, _From, State) ->
                 PL0 when is_list(PL0) ->
                     case proplists:get_value(<<"states">>, PL0) of
                         V when is_list(V) ->
-                            {reply, {ok, V}, State}
+                            F = fun({<<"id">>, V0}) ->
+                                        {id, V0};
+                                   ({<<"variable">>, V0}) ->
+                                        {variable, V0};
+                                   ({<<"service">>, V0}) ->
+                                        {service, V0};
+                                   ({<<"value">>, V0}) ->
+                                        {value, V0}
+                                end,
+                            {reply, {ok, lists:map(fun(I) -> lists:map(F, I) end, V)}, State}
                     end
             end;
         {error, _} = E ->

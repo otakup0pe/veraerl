@@ -67,9 +67,9 @@ device_vars(Name, DName) ->
                                    F = fun(K) ->
                                                string:strip(binary_to_list(proplists:get_value(K, PL)))
                                        end,
-                                   [Service] = lists:sublist(string:tokens(F(<<"service">>), ":"), 4, 1),
-                                   Variable = F(<<"variable">>),
-                                   DFun(Service) ++ DFun(Variable) ++ F(<<"value">>) ++ "\n"
+                                   [Service] = lists:sublist(string:tokens(F(service), ":"), 4, 1),
+                                   Variable = F(variable),
+                                   DFun(Service) ++ DFun(Variable) ++ F(value) ++ "\n"
                            end, vera_client:device_vars(PID, p_device_id(PID, DName)))}
     end.
 
