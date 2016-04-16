@@ -21,7 +21,9 @@ vera_request(Method, Request) ->
         {error,socket_closed_remotely} ->
             {error, network};
         {error, {failed_connect, _E}} ->
-            {error, network}
+            {error, network};
+        {error, {{_, 500, _}, _H, <<"ERROR:Tunnel not found">>}} ->
+            {error, tunnel}
     end.
 
 remote_vera(Host, Suffix, Session, PKID) ->
@@ -41,7 +43,11 @@ local_vera(Host, Suffix) ->
         {ok, {{_, 200, _}, _H, <<"OK">>}} ->
             ok;
         {ok, {{_, 200, _}, _H, Body}} ->
-            jsx:decode(Body)
+            jsx:decode(Body);
+        {error,socket_closed_remotely} ->
+            {error, network};
+        {error, {failed_connect, _E}} ->
+            {error, network}
     end.
 
 distill_device(Device) when is_list(Device) ->
@@ -158,7 +164,9 @@ login(User, Password) ->
         {ok, AuthToken, AuthSig, AuthServer} ->
             case get_session(AuthServer, AuthToken, AuthSig) of
                 {ok, Session} ->
-                    {ok, AuthToken, AuthSig, Session}
+                    {ok, AuthToken, AuthSig, Session};
+                {error, _} = E ->
+                    E
             end;
         {error, _} = E ->
             E

@@ -5,7 +5,12 @@
 -record(state, {username, password, device, server, token, pid}).
 
 start_link(Username, Password, Device) ->
-    gen_server:start_link(?MODULE, {Username, Password, Device}, []).
+    case gen_server:start_link(?MODULE, {Username, Password, Device}, []) of
+        {ok, _PID} = P->
+            P;
+        {error, {error, _} = E} ->
+            E
+    end.
 
 init({Username, Password, Device}) ->
     {ok, p_rehash(#state{username = Username,
@@ -30,9 +35,9 @@ p_rehash(#state{username = U, password = P, device = D, pid = undefined} = State
                           }
             end;
         {error, auth} ->
-            timer:sleep(5000 * I),
+            timer:sleep(10000 * I),
             p_rehash(State, I + 1);
-        {error, network} ->
+        {error, E} when E == network; E == tunnel ->
             timer:sleep(5000 * I),
             p_rehash(State, I + 1)
     end;
