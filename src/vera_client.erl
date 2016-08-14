@@ -60,7 +60,9 @@ device_id(_PID, _Name, [], R) when is_list(R) ->
 device_id(PID, Name, [{ID, Name}|T], R) ->
     device_id(PID, Name, T, [ID|R]);
 device_id(PID, Name, [_|T], R) ->
-    device_id(PID, Name, T, R).
+    device_id(PID, Name, T, R);
+device_id(_PID, _Name, {error, _} = E, R) ->
+    E.
 
 device_name(PID, ID) when is_pid(PID), is_integer(ID) ->
     device_name(ID, device_list(PID));

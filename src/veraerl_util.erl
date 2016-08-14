@@ -47,6 +47,8 @@ local_vera(Host, Suffix) ->
         {error,socket_closed_remotely} ->
             {error, network};
         {error, {failed_connect, _E}} ->
+            {error, network};
+        {error, {tcp_error, _, _E}} ->
             {error, network}
     end.
 
@@ -222,6 +224,8 @@ device_session(Device, AT, AS, [DObj|T]) ->
                 {ok, DSession} ->
                     {ok, DServer, DSession}
             end;
+        OtherDevice when is_integer(OtherDevice) ->
+            device_session(Device, AT, AS, T);
         undefined ->
             device_session(Device, AT, AS, T)
     end.
