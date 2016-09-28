@@ -56,8 +56,8 @@ p_rehash(#state{username = U, password = P, device = D, pid = PID} = State, I) w
 
 p_login(U, P, D) ->
     case veraerl_util:login(U, P) of
-        {ok, AT, AS, AccountSession} ->
-            case p_relay_session(AT, AS, AccountSession, D) of
+        {ok, AT, AS, AccountSession, AuthServer} ->
+            case p_relay_session(AT, AS, AccountSession, D, AuthServer) of
                 {ok, RelayServer, RelaySession} ->
                     {ok, RelayServer, RelaySession};
                 {error, _} = E ->
@@ -67,9 +67,9 @@ p_login(U, P, D) ->
             E
     end.
 
-p_relay_session(AT, AS, AccountSession, D) ->
+p_relay_session(AT, AS, AccountSession, D, AuthServer) ->
     {ok, DeviceURL, Account} = veraerl_util:decode_token(AT),
-    case veraerl_util:discover(DeviceURL, Account, AccountSession) of
+    case veraerl_util:discover(AuthServer, Account, AccountSession) of
         Devices when is_list(Devices) ->
             case veraerl_util:device_session(D, AT, AS, Devices) of
                 {ok, DeviceServer, DeviceSession} ->

@@ -195,9 +195,9 @@ handle_call({device_power, ID, P}, _From, State) ->
           {"DeviceNum", integer_to_list(ID)},
           {"serviceId", "urn:upnp-org:serviceId:SwitchPower1"},
           {"action", "SetTarget"},
-          {"newTargetValue", integer_to_list(if P == on ->
+          {"newTargetValue", integer_to_list(if P == on; P == true ->
                                                      1;
-                                                P == off ->
+                                                P == off; P == false ->
                                                      0
                                              end)}],
     case hit_vera(PL, State) of

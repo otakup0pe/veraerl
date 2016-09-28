@@ -166,7 +166,7 @@ login(User, Password) ->
         {ok, AuthToken, AuthSig, AuthServer} ->
             case get_session(AuthServer, AuthToken, AuthSig) of
                 {ok, Session} ->
-                    {ok, AuthToken, AuthSig, Session};
+                    {ok, AuthToken, AuthSig, Session, AuthServer};
                 {error, _} = E ->
                     E
             end;
