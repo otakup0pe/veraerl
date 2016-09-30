@@ -82,7 +82,9 @@ p_relay_session(AT, AS, AccountSession, D, AuthServer) ->
 handle_call(MSG, _From, State) ->
     case call_vera(MSG, State) of
         {ok, _} = Reply ->
-            {reply, Reply, State}
+            {reply, Reply, State};
+        {error, _} = E ->
+            {reply, E, State}
     end.
 
 call_vera(MSG, State) ->
