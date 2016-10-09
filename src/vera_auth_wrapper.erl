@@ -68,7 +68,7 @@ p_login(U, P, D) ->
     end.
 
 p_relay_session(AT, AS, AccountSession, D, AuthServer) ->
-    {ok, DeviceURL, Account} = veraerl_util:decode_token(AT),
+    {ok, _DeviceURL, Account} = veraerl_util:decode_token(AT),
     case veraerl_util:discover(AuthServer, Account, AccountSession) of
         Devices when is_list(Devices) ->
             case veraerl_util:device_session(D, AT, AS, Devices) of

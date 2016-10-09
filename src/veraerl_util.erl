@@ -209,7 +209,9 @@ relay_session(Device, AT, AS, DServer, DSession) ->
             RServer = proplists:get_value(relay, proplists:get_value(servers, PL)),
             case veraerl_util:get_session(RServer, AT, AS) of
                 {ok, RSession} ->
-                    {ok, RServer, RSession}
+                    {ok, RServer, RSession};
+                {error, _} = E ->
+                    E
             end
     end.
 
@@ -222,7 +224,9 @@ device_session(Device, AT, AS, [DObj|T]) ->
             DServer = proplists:get_value(device, F(servers)),
             case veraerl_util:get_session(DServer, AT, AS) of
                 {ok, DSession} ->
-                    {ok, DServer, DSession}
+                    {ok, DServer, DSession};
+                {error, _} = E ->
+                    E
             end;
         OtherDevice when is_integer(OtherDevice) ->
             device_session(Device, AT, AS, T);
