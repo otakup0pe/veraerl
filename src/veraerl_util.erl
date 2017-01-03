@@ -22,7 +22,7 @@ vera_request(Method, Request) ->
             {error, network};
         {error, {failed_connect, _E}} ->
             {error, network};
-        {error, {{_, 500, _}, _H, _Body}} ->
+        {ok, {{_, 500, _}, _H, _Body}} ->
             {error, server}
     end.
 
