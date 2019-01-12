@@ -4,6 +4,7 @@ build:
 	rebar3 escriptize
 
 clean:
-	rm -f _build veraerl
+	rebar3 clean
+	rm -rf _checkouts/*/ebin/ _checkouts/*/_build _build
 
 .PHONY: build clean
