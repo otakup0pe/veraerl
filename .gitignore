@@ -4,4 +4,4 @@ deps
 veraerl
 .rebar
 _build
-rebar.lock
+rebar.lockrebar3.crashdump
