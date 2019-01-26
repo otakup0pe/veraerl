@@ -5,3 +5,4 @@ veraerl
 .rebar
 _build
 rebar.lockrebar3.crashdump
+rebar.lock rebar3.crashdump
